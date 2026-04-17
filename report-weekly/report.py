@@ -16,6 +16,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import date
@@ -29,8 +30,6 @@ DST_SHEET_ID = "1k8sK-39m0SP1EfV4J_IjKbWm9HMmufoZOx2WYZG5ais"
 
 COL_MONTH, COL_FIO, COL_NUMBER, COL_PARTNER, COL_MANAGER = 0, 1, 2, 3, 4
 COL_PLAN, COL_FACT, COL_DEBT = 5, 6, 7
-
-SERVICE_ACCOUNT_PATH = Path.home() / "Desktop" / "receipt-bot" / "service_account.json"
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -91,8 +90,32 @@ def _delta_rate(cur, prev):
     return f"{cur:.1f}% ({d:+.1f})"
 
 
+def _resolve_credentials_path():
+    """Find service_account.json — env var wins, else try known locations."""
+    override = os.environ.get("REPORT_SERVICE_ACCOUNT")
+    if override:
+        p = Path(override).expanduser()
+        if p.exists():
+            return p
+        raise FileNotFoundError(f"REPORT_SERVICE_ACCOUNT points to missing file: {p}")
+
+    candidates = [
+        Path.home() / "Desktop" / "receipt-bot" / "service_account.json",
+        Path(__file__).resolve().parent / "service_account.json",
+        Path.home() / ".claude" / "skills" / "report-weekly" / "service_account.json",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    raise FileNotFoundError(
+        "service_account.json not found. Checked: "
+        + ", ".join(str(c) for c in candidates)
+        + ". Set REPORT_SERVICE_ACCOUNT env var to override."
+    )
+
+
 def get_client():
-    creds = Credentials.from_service_account_file(str(SERVICE_ACCOUNT_PATH), scopes=SCOPES)
+    creds = Credentials.from_service_account_file(str(_resolve_credentials_path()), scopes=SCOPES)
     return gspread.authorize(creds)
 
 
